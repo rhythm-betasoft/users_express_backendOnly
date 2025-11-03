@@ -1,0 +1,54 @@
+[
+    {
+        "name": "Alice",
+        "email": "alice@example.com",
+        "password": "12345"
+    },
+    {
+        "name": "Bob",
+        "email": "bob@example.com",
+        "password": "12345"
+    },
+    {
+        "id": 3,
+        "name": "Alice",
+        "email": "alice1@example.com",
+        "password": "mypassword123"
+    },
+    {
+        "id": 4,
+        "name": "Alice",
+        "email": "alice11@example.com",
+        "password": "mypassword123"
+    },
+    {
+        "id": 5,
+        "name": "Alice",
+        "email": "alic@example.com",
+        "password": "mypassword123"
+    },
+    {
+        "id": 6,
+        "name": "Alice",
+        "email": "alice55@example.com",
+        "password": "123456"
+    },
+    {
+        "id": 7,
+        "name": "rhythm",
+        "email": "rhythmtrehan0011@gmail.com",
+        "password": "$2b$10$W8.ttVStIuJwCfEx3zgZeuq71p4L.JJAMXt12Sx8TvZetWHHBIfM2"
+    },
+    {
+        "id": 8,
+        "name": "rhythm",
+        "email": "rhythmtrehan001@gmail.com",
+        "password": "$2b$10$KsM26nZ8kOnBP7uomfV4RuXkec0CiP/jj/d9gQNcX6qDrQy0LQdZO"
+    },
+    {
+        "id": 9,
+        "name": "Rhythm Trehan",
+        "email": "rhythm787@gmail.com",
+        "password": "$2b$10$GJX7Qm8ae7o4xz0wJ1OpMefjauYEszE1zrNERvaoF77JeG0dgDKiC"
+    }
+]
