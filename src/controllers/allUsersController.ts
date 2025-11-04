@@ -26,14 +26,24 @@ class allUsersController {
     // }
     static async getAllUsers(req: Request, res: Response) {
       try {
-        const skip = req.query.skip ? JSON.parse(req.query.skip as string) : 0;
-        const take = req.query.take ? JSON.parse(req.query.take as string) : 10;
+        const skip = req.query.skip ? JSON.parse(req.query.skip as string) : null;
+        const take = req.query.take ? JSON.parse(req.query.take as string) : null;
         const sort = req.query.sort ? JSON.parse(req.query.sort as string) : [];
         const filter = req.query.filter ? JSON.parse(req.query.filter as string) : [];
+        console.log(skip)
+        console.log(take)
+        if(!skip && !take){
+             const query = `
+            SELECT *
+            FROM users`;
+             const [rows]: any = await pool.query(query);
+             res.json({ data: rows });
+        }
+        else{
         let whereClause = "";
         let orderClause = "";
         if (filter.length === 3) {
-            const [field, operator, value] = filter;
+            const [field, operator] = filter;
             if (operator === "=") whereClause = `WHERE ${field} = ?`;
             else if (operator === "contains") whereClause = `WHERE ${field} LIKE ?`;
         }
@@ -56,6 +66,7 @@ class allUsersController {
         const [countResult]: any = await pool.query("SELECT COUNT(*) AS total FROM users");
         const total = countResult[0].total;
         res.json({ data: rows, totalCount: total });
+        }
     } 
     catch (err) {
         console.error("Error fetching users:", err);
@@ -70,10 +81,10 @@ class allUsersController {
         }
         catch (error) {
             console.log(error);
-            return res.status(500).json({ message: "Server error" });
+            return res.status(500).json({ message: "Server error" });   
         }
     }
-
+    
     static async editUser(req: Request, res: Response) {
         const { id } = req.params;
         const fields = req.body;

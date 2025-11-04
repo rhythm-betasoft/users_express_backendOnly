@@ -132,10 +132,8 @@ class UserController {
     return res.status(200).json({ message: "Hello" });
   }
  static async updateProfile(req: Request, res: Response) {
-  const userId = req.params.userId;  // Get userId from route params
-
+  const userId = req.params.userId; 
   const { age, gender, religion, blood_group } = req.body;
-
   if (!age || !gender || !religion || !blood_group) {
     return res.status(400).json({ message: "All fields are required" });
   }
@@ -145,13 +143,12 @@ class UserController {
       'UPDATE users SET age = ?, gender = ?, religion = ?, blood_group = ? WHERE id = ?',
       [age, gender, religion, blood_group, userId]
     );
-
     if (result.affectedRows === 0) {
       return res.status(400).json({ message: "No user found with the provided ID" });
     }
-
     return res.status(200).json({ message: "User edited successfully!" });
-  } catch (error: any) {
+  } 
+  catch (error: any) {
     console.error('Error during database update:', error);
     return res.status(500).json({ message: "Server error", error: error.message });
   }
