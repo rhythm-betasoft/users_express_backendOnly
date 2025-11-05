@@ -24,7 +24,7 @@ class allUsersController {
     //         return res.status(500).json({ message: "Server error" });
     //     }
     // }
-    static async getAllUsers(req: Request, res: Response) {
+ async getAllUsers(req: Request, res: Response) {
       try {
         const skip = req.query.skip ? JSON.parse(req.query.skip as string) : null;
         const take = req.query.take ? JSON.parse(req.query.take as string) : null;
@@ -73,7 +73,7 @@ class allUsersController {
         res.status(500).json({ message: "Error fetching users", error: err });
     }
     }
-    static async deleteUser(req: Request, res: Response) {
+     async deleteUser(req: Request, res: Response) {
         const { id } = req.params
         try {
             const [result] = await pool.query('DELETE FROM users WHERE id=?', [id])
@@ -85,7 +85,7 @@ class allUsersController {
         }
     }
     
-    static async editUser(req: Request, res: Response) {
+  async editUser(req: Request, res: Response) {
         const { id } = req.params;
         const fields = req.body;
 

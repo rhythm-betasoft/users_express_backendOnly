@@ -9,20 +9,22 @@ const REFRESH_SECRET = process.env.REFRESH_SECRET || "abcde"
 
 
 class UserController {
-  static async allUsers(req: Request, res: Response) {
+  async allUsers(req: Request, res: Response) {
     // const users: User[] = read();
     // res.json(users);
     const [rows] = await pool.query('SELECT * FROM users');
     return res.status(200).json({ users: rows });
   }
-  static async register(req: Request, res: Response) {
+ async register(req: Request, res: Response) {
     const { name, email, password, confirm } = req.body;
-    if (!name || !email || !password || !confirm) {
+    if (!name || !email || !password ) {
       return res.status(400).json({ message: "All fields are required" });
     }
+    if(confirm!==undefined){
     if (password !== confirm) {
       return res.status(400).json({ message: "Passwords do not match" });
     }
+  }
     //   const users: User[] = read()
     //   const existingUser = users.find((user: any) => user.email === email);
     //   if (existingUser) {
@@ -72,7 +74,7 @@ class UserController {
       return res.status(500).json({ message: "Server error" });
     }
   }
-  static async login(req: Request, res: Response) {
+ async login(req: Request, res: Response) {
     const { email, password } = req.body;
     if (!email || !password) {
       return res.status(400).json({ message: "Email and password are required" });
@@ -110,7 +112,7 @@ class UserController {
     )
     return res.status(200).json({ message: "Login successful", accesstoken, refreshtoken, user });
   }
-  static refresh(req: Request, res: Response) {
+  refresh(req: Request, res: Response) {
     const { refreshtoken } = req.body;
     if (!refreshtoken) {
       return res.status(401).json({ message: "No refresh token provided" });
@@ -128,10 +130,10 @@ class UserController {
       return res.status(403).json({ message: "Invalid or expired refresh token" });
     }
   }
-  static profile(req: Request, res: Response) {
+ profile(req: Request, res: Response) {
     return res.status(200).json({ message: "Hello" });
   }
- static async updateProfile(req: Request, res: Response) {
+ async updateProfile(req: Request, res: Response) {
   const userId = req.params.userId; 
   const { age, gender, religion, blood_group } = req.body;
   if (!age || !gender || !religion || !blood_group) {
