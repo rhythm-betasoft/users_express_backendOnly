@@ -8,4 +8,4 @@ const pool = mysql.createPool({
     database: process.env.DATABASE,
     port: process.env.SQL_PORT ? +process.env.SQL_PORT : 3306,
 })
-export default pool;
+// export default pool;

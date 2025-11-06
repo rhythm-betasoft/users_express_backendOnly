@@ -4,7 +4,15 @@ import cors from 'cors'
 import userRoutes from "./routes/userRoutes";
 import cookieParser from "cookie-parser";
 import allUsersRoutes from './routes/allUsersRoutes'
-
+import "reflect-metadata"
+import { AppDataSource } from "./dataSource"
+AppDataSource.initialize()
+  .then(() => {
+    console.log("Data Source has been initialized!");
+  })
+  .catch((err) => {
+    console.error("Error during Data Source initialization:", err);
+  });
 dotenv.config();
 
 const app = express();
