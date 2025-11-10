@@ -1,5 +1,5 @@
-import { Entity, PrimaryGeneratedColumn, Column } from "typeorm";
-
+import { Entity, PrimaryGeneratedColumn, Column, OneToMany } from "typeorm";
+import {Spend} from './Spend'
 @Entity("users")
 export class User {
   @PrimaryGeneratedColumn()
@@ -18,7 +18,7 @@ export class User {
   gender!: string;
 
   @Column({ name: "blood_group" })
-  bloodGroup!: string;
+  blood_group!: string;
 
   @Column({ name: "religion" })
   religion!: string;
@@ -28,4 +28,6 @@ export class User {
 
   @Column({ name: "role" })
   role!: string;
+  @OneToMany(() => Spend, (spend) => spend.user)
+spends!: Spend[];
 }

@@ -1,7 +1,7 @@
 import { Request, Response } from "express";
 import { AppDataSource } from "../dataSource";
 import { User } from "../entity/User";
-
+import {Spend} from "../entity/Spend"
 const userRepository = AppDataSource.getRepository(User);
 
 class AllUsersController {
@@ -14,10 +14,21 @@ class AllUsersController {
       console.log("Skip:", skip);
       console.log("Take:", take);
       if (!skip && !take) {
-        const users = await userRepository.find();
-        return res.json({ data: users });
+        const users = await userRepository.find({ relations: ["spends"] });
+        const totalSalary = await userRepository
+          .createQueryBuilder("user")
+          .leftJoinAndSelect("user.spends", "spends")
+          .select("SUM(spends.salary)", "totalSalary") 
+          .getRawOne();
+        return res.json({ data: users, summary: [
+            {
+              column: "salary",
+              summaryType: "sum",
+              total: totalSalary.totalSalary, 
+            },
+          ], });
       }
-      let query = userRepository.createQueryBuilder("user");
+      let query = userRepository.createQueryBuilder("user").leftJoinAndSelect("user.spends", "spends"); ;
       if (filter.length === 3) {
         const [field, operator, value] = filter;
         if (operator === "=") query = query.where(`user.${field} = :value`, { value });
@@ -31,63 +42,60 @@ class AllUsersController {
       if (skip !== null && take !== null) {
         query = query.skip(skip).take(take);
       }
-      query = query.select([
-        "user.id",
-        "user.name",
-        "user.email",
-        "user.role",
-        "user.age",
-        "user.gender",
-        "user.religion",
-        "user.bloodGroup"
-      ]);
-
+      // query = query.select([ "user.id","user.name", "user.email", "user.role", "user.age", "user.gender", "user.religion", "user.blood_group", "spends.id", "spends.salary", "spends.expenses", "spends.saving"]);
       const [users, total] = await query.getManyAndCount();
+      console.log("Users with spends:", users);
+       const totalSalary = await userRepository
+        .createQueryBuilder("user")
+        .leftJoinAndSelect("user.spends", "spends")
+        .select("SUM(spends.salary)", "totalSalary") 
+        .getRawOne();
 
-      res.json({ data: users, totalCount: total });
-    } catch (err) {
-      console.error("Error fetching users:", err);
+
+      res.json({ data: users, totalCount: total,summary: [
+          {
+            column: "salary",
+            summaryType: "sum",
+            total: totalSalary.totalSalary,
+          },
+        ], });
+    }
+     catch (err) {
+      console.error("Error fetching users:", err);                                                                      
       res.status(500).json({ message: "Error fetching users", error: err });
-    }
+    } 
   }
-
-  async deleteUser(req: Request, res: Response) {
-    const { id } = req.params;
-    try {
-      const result = await userRepository.delete(id);
-      if (result.affected === 0) {
-        return res.status(404).json({ message: "User not found" });
-      }
-      return res.status(200).json({ message: "User deleted successfully" });
-    } catch (err) {
-      console.error(err);
-      return res.status(500).json({ message: "Server error", error: err });
-    }
-  }
-
-  async editUser(req: Request, res: Response) {
-    const { id } = req.params;
-    const fields = req.body;
-
-    if (!Object.keys(fields).length) {
-      return res.status(400).json({ message: "No fields to update" });
-    }
-
-    try {
-      const user = await userRepository.findOneBy({ id: Number(id) });
-      if (!user) return res.status(404).json({ message: "User not found" });
-
-      userRepository.merge(user, fields);
-      const updatedUser = await userRepository.save(user);
-
-      return res.status(200).json({ message: "User updated successfully", data: updatedUser });
-    } catch (err) {
-      console.error("Error updating user:", err);
-      return res.status(500).json({ message: "Server error", error: err });
-    }
-  }
+async deleteUser(req:Request,res:Response){
+const {id}=req.params;
+try{
+    const resp=await userRepository.delete(id);
+    return res.status(200).json({message:"USED HAS BEEN DELETED"})
+}
+catch(err){
+    return res.status(500).json("error deleting")
+}
 }
 
+ async editUser(req: Request, res: Response) {
+  const { id } = req.params;
+  const fields = req.body;
+  if (!Object.keys(fields).length) {
+    return res.status(400).json({ message: "No fields to update" });
+  }
+  try {
+    const user = await userRepository.findOneBy({ id: Number(id) });
+    if (!user) return res.status(404).json({ message: "User not found" });
+    await userRepository.update(id, fields);
+    const updatedUser = await userRepository.findOneBy({ id: Number(id) });
+    return res.status(200).json({ message: "User updated successfully", data: updatedUser });
+  }
+   catch (err:any) {
+    console.error("Error updating user:", err);
+    return res.status(500).json({ message: "Server error", error: err.message });
+  }
+}   
+
+}
 export default AllUsersController;
 
 

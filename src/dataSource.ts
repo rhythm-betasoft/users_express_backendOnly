@@ -1,17 +1,17 @@
 import "reflect-metadata"
 import { DataSource } from "typeorm";
 import {User} from './entity/User';
+import { Spend } from "./entity/Spend";
 import * as dotenv from "dotenv"
 dotenv.config();  
 export const AppDataSource = new DataSource({
   type: "mysql", 
-  host: process.env.HOST,
+   host: process.env.HOST || "127.0.0.1",
   port: 3306,
   username: process.env.USER,
   password: process.env.PASS,
   database: process.env.DATABASE,
-  entities: [User],
-  // migrations:['src/migration'],
+  entities: [User,Spend],
   synchronize: false,
   migrations:["src/migration*.ts"], 
   logging: true,

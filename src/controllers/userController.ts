@@ -3,7 +3,7 @@ import { AppDataSource } from "../dataSource";
 import { User } from "../entity/User";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
-
+import { transporter } from "../utils/mail";
 const ACCESS_SECRET = process.env.ACCESS_SECRET || "abcde";
 const REFRESH_SECRET = process.env.REFRESH_SECRET || "abcde";
 
@@ -13,7 +13,7 @@ class UserController {
   async allUsers(req: Request, res: Response) {
     try {
       const users = await userRepository.find({
-        select: ["id", "name", "email", "role", "age", "gender", "religion", "bloodGroup"]
+        select: ["id", "name", "email", "role", "age", "gender", "religion", "blood_group"]
       });
       return res.status(200).json({ users });
     } catch (err) {
@@ -25,19 +25,20 @@ class UserController {
     const { name, email, password, confirm } = req.body;
     if (!name || !email || !password) return res.status(400).json({ message: "All fields are required" });
     if (confirm && password !== confirm) return res.status(400).json({ message: "Passwords do not match" });
-
     try {
       const existingUser = await userRepository.findOneBy({ email });
       if (existingUser) return res.status(400).json({ message: "Email already registered" });
-
       const hashedPassword = await bcrypt.hash(password, 10);
-
       const newUser = userRepository.create({ name, email, password: hashedPassword, role: "user" });
       const savedUser = await userRepository.save(newUser);
-
       const accesstoken = jwt.sign({ id: savedUser.id, email: savedUser.email, role: savedUser.role }, ACCESS_SECRET, { expiresIn: "2m" });
       const refreshtoken = jwt.sign({ id: savedUser.id, email: savedUser.email, role: savedUser.role }, REFRESH_SECRET, { expiresIn: "1d" });
-
+       await transporter.sendMail({
+      from: `"Betasoft Solutions" <${process.env.EMAIL_USER}>`,
+      to: savedUser.email,
+      subject: "Welcome to Betasoft Solutions!",
+      html: `<h3>Hello ${savedUser.name},</h3><p>Thanks for registering! Welcome to th family!!!!.</p>`,
+    });
       return res.status(201).json({ message: "User registered successfully", accesstoken, refreshtoken, user: savedUser });
     } catch (err) {
       return res.status(500).json({ message: "Server error" });
@@ -47,17 +48,13 @@ class UserController {
   async login(req: Request, res: Response) {
     const { email, password } = req.body;
     if (!email || !password) return res.status(400).json({ message: "Email and password are required" });
-
     try {
       const user = await userRepository.findOneBy({ email });
       if (!user) return res.status(404).json({ message: "User not found" });
-
       const isPasswordValid = await bcrypt.compare(password, user.password);
       if (!isPasswordValid) return res.status(401).json({ message: "Invalid password" });
-
       const accesstoken = jwt.sign({ id: user.id, email: user.email, role: user.role }, ACCESS_SECRET, { expiresIn: "2m" });
       const refreshtoken = jwt.sign({ id: user.id, email: user.email, role: user.role }, REFRESH_SECRET, { expiresIn: "1d" });
-
       return res.status(200).json({ message: "Login successful", accesstoken, refreshtoken, user });
     } catch (err) {
       return res.status(500).json({ message: "Server error" });
@@ -67,12 +64,13 @@ class UserController {
   refresh(req: Request, res: Response) {
     const { refreshtoken } = req.body;
     if (!refreshtoken) return res.status(401).json({ message: "No refresh token provided" });
-
     try {
       const decoded = jwt.verify(refreshtoken, REFRESH_SECRET) as { id: number; email: string };
       const newAccessToken = jwt.sign({ id: decoded.id, email: decoded.email }, ACCESS_SECRET, { expiresIn: "2m" });
+      console.log(newAccessToken)
       return res.status(200).json({ accesstoken: newAccessToken });
-    } catch {
+    }
+     catch {
       return res.status(403).json({ message: "Invalid or expired refresh token" });
     }
   }
@@ -80,24 +78,21 @@ class UserController {
   profile(req: Request, res: Response) {
     return res.status(200).json({ message: "Hello" });
   }
-
   async updateProfile(req: Request, res: Response) {
     const userId = Number(req.params.userId);
     const { age, gender, religion, blood_group } = req.body;
     if (!age || !gender || !religion || !blood_group) return res.status(400).json({ message: "All fields are required" });
-
     try {
       const user = await userRepository.findOneBy({ id: userId });
       if (!user) return res.status(404).json({ message: "User not found" });
-
       user.age = age;
       user.gender = gender;
       user.religion = religion;
-      user.bloodGroup = blood_group;
-
+      user.blood_group = blood_group;
       await userRepository.save(user);
       return res.status(200).json({ message: "User profile updated successfully", user });
-    } catch (err: any) {
+    } 
+    catch (err: any) {
       return res.status(500).json({ message: "Server error", error: err.message });
     }
   }

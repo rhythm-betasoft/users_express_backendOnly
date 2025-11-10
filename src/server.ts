@@ -4,6 +4,7 @@ import cors from 'cors'
 import userRoutes from "./routes/userRoutes";
 import cookieParser from "cookie-parser";
 import allUsersRoutes from './routes/allUsersRoutes'
+import spendRoutes from "./routes/spendRoutes"
 import "reflect-metadata"
 import { AppDataSource } from "./dataSource"
 AppDataSource.initialize()
@@ -28,6 +29,7 @@ app.use(cors({
 
 app.use("/users", userRoutes);
 app.use(allUsersRoutes)
+app.use("/users", spendRoutes);
 
 
 app.listen(PORT, () => {
