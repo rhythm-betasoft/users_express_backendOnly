@@ -5,66 +5,82 @@ import {Spend} from "../entity/Spend"
 const userRepository = AppDataSource.getRepository(User);
 
 class AllUsersController {
-  async getAllUsers(req: Request, res: Response) {
-    try {
-      const skip = req.query.skip ? JSON.parse(req.query.skip as string) : null;
-      const take = req.query.take ? JSON.parse(req.query.take as string) : null;
-      const sort = req.query.sort ? JSON.parse(req.query.sort as string) : [];
-      const filter = req.query.filter ? JSON.parse(req.query.filter as string) : [];
-      console.log("Skip:", skip);
-      console.log("Take:", take);
-      if (!skip && !take) {
-        const users = await userRepository.find({ relations: ["spends"] });
-        const totalSalary = await userRepository
-          .createQueryBuilder("user")
-          .leftJoinAndSelect("user.spends", "spends")
-          .select("SUM(spends.salary)", "totalSalary") 
-          .getRawOne();
-        return res.json({ data: users, summary: [
-            {
-              column: "salary",
-              summaryType: "sum",
-              total: totalSalary.totalSalary, 
-            },
-          ], });
-      }
-      let query = userRepository.createQueryBuilder("user").leftJoinAndSelect("user.spends", "spends"); ;
-      if (filter.length === 3) {
-        const [field, operator, value] = filter;
-        if (operator === "=") query = query.where(`user.${field} = :value`, { value });
-        if (operator === "contains") query = query.where(`user.${field} LIKE :value`, { value: `%${value}%` });
-      }
-      if (sort.length > 0) {
-        const sortField = sort[0].selector;
-        const sortOrder = sort[0].desc ? "DESC" : "ASC";
-        query = query.orderBy(`user.${sortField}`, sortOrder);
-      }
-      if (skip !== null && take !== null) {
-        query = query.skip(skip).take(take);
-      }
-      // query = query.select([ "user.id","user.name", "user.email", "user.role", "user.age", "user.gender", "user.religion", "user.blood_group", "spends.id", "spends.salary", "spends.expenses", "spends.saving"]);
-      const [users, total] = await query.getManyAndCount();
-      console.log("Users with spends:", users);
-       const totalSalary = await userRepository
-        .createQueryBuilder("user")
-        .leftJoinAndSelect("user.spends", "spends")
-        .select("SUM(spends.salary)", "totalSalary") 
-        .getRawOne();
+async getAllUsers(req: Request, res: Response) {
+  try {
+    const skip = req.query.skip ? JSON.parse(req.query.skip as string) : null;
+    const take = req.query.take ? JSON.parse(req.query.take as string) : null;
+    const sort = req.query.sort ? JSON.parse(req.query.sort as string) : [];
+    const filter = req.query.filter ? JSON.parse(req.query.filter as string) : [];
 
+    const query = userRepository.createQueryBuilder("user").leftJoinAndSelect("user.spends", "spends");
 
-      res.json({ data: users, totalCount: total,summary: [
-          {
-            column: "salary",
-            summaryType: "sum",
-            total: totalSalary.totalSalary,
-          },
-        ], });
+    // Handle multiple filters
+    if (Array.isArray(filter) && filter.length > 0) {
+      filter.forEach(([field, operator, value], index) => {
+        const paramKey = `value${index}`;
+        if (operator === "=") {
+          if (index === 0) {
+            query.where(`user.${field} = :${paramKey}`, { [paramKey]: value });
+          } else {
+            query.andWhere(`user.${field} = :${paramKey}`, { [paramKey]: value });
+          }
+        } else if (operator === "contains") {
+          if (index === 0) {
+            query.where(`user.${field} LIKE :${paramKey}`, { [paramKey]: `%${value}%` });
+          } else {
+            query.andWhere(`user.${field} LIKE :${paramKey}`, { [paramKey]: `%${value}%` });
+          }
+        }
+      });
     }
-     catch (err) {
-      console.error("Error fetching users:", err);                                                                      
-      res.status(500).json({ message: "Error fetching users", error: err });
-    } 
+
+    // Handle multiple sorts
+    if (Array.isArray(sort) && sort.length > 0) {
+      sort.forEach(({ selector, desc }, index) => {
+        const order = desc ? "DESC" : "ASC";
+        if (index === 0) {
+          query.orderBy(`user.${selector}`, order);
+        } else {
+          query.addOrderBy(`user.${selector}`, order);
+        }
+      });
+    }
+
+    // Apply pagination
+    if (skip !== null && take !== null) {
+      query.skip(skip).take(take);
+    }
+
+    const [users, total] = await query.getManyAndCount();
+
+    const flattenedUsers = users.map(user => ({
+      ...user,
+      salary: user.spends?.reduce((sum, spend) => sum + (Number(spend.salary) || 0), 0) ?? 0,
+    }));
+
+    const totalSalary = await userRepository
+      .createQueryBuilder("user")
+      .leftJoinAndSelect("user.spends", "spends")
+      .select("SUM(spends.salary)", "totalSalary")
+      .getRawOne();
+
+    return res.json({
+      data: flattenedUsers,
+      totalCount: total,
+      summary: [
+        {
+          column: "salary",
+          summaryType: "sum",
+          value: Number(totalSalary.totalSalary),
+        },
+      ],
+    });
+  } catch (err) {
+    console.error("Error fetching users:", err);
+    res.status(500).json({ message: "Error fetching users", error: err });
   }
+}
+
 async deleteUser(req:Request,res:Response){
 const {id}=req.params;
 try{
@@ -76,24 +92,34 @@ catch(err){
 }
 }
 
- async editUser(req: Request, res: Response) {
+async editUser(req: Request, res: Response) {
   const { id } = req.params;
   const fields = req.body;
+
   if (!Object.keys(fields).length) {
     return res.status(400).json({ message: "No fields to update" });
   }
+
   try {
     const user = await userRepository.findOneBy({ id: Number(id) });
-    if (!user) return res.status(404).json({ message: "User not found" });
-    await userRepository.update(id, fields);
-    const updatedUser = await userRepository.findOneBy({ id: Number(id) });
-    return res.status(200).json({ message: "User updated successfully", data: updatedUser });
-  }
-   catch (err:any) {
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    const updatedUser = await userRepository.save({ ...user, ...fields });
+
+    return res.status(200).json({
+      message: "User updated successfully",
+      data: updatedUser,
+    });
+  } catch (err: any) {
     console.error("Error updating user:", err);
-    return res.status(500).json({ message: "Server error", error: err.message });
+    return res.status(500).json({
+      message: "Server error",
+      error: err.message,
+    });
   }
-}   
+}
 
 }
 export default AllUsersController;

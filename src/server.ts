@@ -35,3 +35,4 @@ app.use("/users", spendRoutes);
 app.listen(PORT, () => {
   console.log(`Server running on http://localhost:${PORT}`);
 });
+  
