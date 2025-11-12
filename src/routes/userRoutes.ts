@@ -9,6 +9,7 @@ router.post("/login", usercontroller.login)
 router.post("/refresh", usercontroller.refresh);
 router.get("/profile", authMiddleware, usercontroller.profile);
 router.put('/profile/:userId', usercontroller.updateProfile);
+router.post("/verify-twofa", usercontroller.verifyTwoFA.bind(usercontroller));
 
 
 export default router;

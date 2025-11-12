@@ -13,8 +13,6 @@ async getAllUsers(req: Request, res: Response) {
     const filter = req.query.filter ? JSON.parse(req.query.filter as string) : [];
 
     const query = userRepository.createQueryBuilder("user").leftJoinAndSelect("user.spends", "spends");
-
-    // Handle multiple filters
     if (Array.isArray(filter) && filter.length > 0) {
       filter.forEach(([field, operator, value], index) => {
         const paramKey = `value${index}`;
@@ -33,20 +31,14 @@ async getAllUsers(req: Request, res: Response) {
         }
       });
     }
-
-    // Handle multiple sorts
+    query.orderBy("user.pinned", "DESC");
     if (Array.isArray(sort) && sort.length > 0) {
       sort.forEach(({ selector, desc }, index) => {
         const order = desc ? "DESC" : "ASC";
-        if (index === 0) {
-          query.orderBy(`user.${selector}`, order);
-        } else {
-          query.addOrderBy(`user.${selector}`, order);
-        }
+       query.addOrderBy(`user.${selector}`, order);
+
       });
     }
-
-    // Apply pagination
     if (skip !== null && take !== null) {
       query.skip(skip).take(take);
     }
@@ -60,7 +52,7 @@ async getAllUsers(req: Request, res: Response) {
 
     const totalSalary = await userRepository
       .createQueryBuilder("user")
-      .leftJoinAndSelect("user.spends", "spends")
+      .leftJoinAndSelect("user.spends", "spends") 
       .select("SUM(spends.salary)", "totalSalary")
       .getRawOne();
 
@@ -120,6 +112,44 @@ async editUser(req: Request, res: Response) {
     });
   }
 }
+async togglePin(req: Request, res: Response) {
+  const { id } = req.params;
+
+  try {
+    const user = await userRepository.findOneBy({ id: Number(id) });
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    user.pinned = !user.pinned;
+    await userRepository.save(user);
+
+    return res.status(200).json({
+      message: `User ${user.pinned ? "pinned" : "unpinned"} successfully`,
+      data: user,
+    });
+  } catch (err:any) {
+    console.error("Error toggling pin:", err);
+    return res.status(500).json({ message: "Server error", error: err.message });
+  }
+}
+async getReligionCounts(req: Request, res: Response) {
+  try {
+    const religionCounts = await userRepository
+      .createQueryBuilder("user")
+      .select("COALESCE(user.religion, 'Unknown') AS religion")
+      .addSelect("COUNT(user.religion)", "count")
+      .groupBy("religion")  
+      .getRawMany();
+    return res.json(religionCounts);
+  } catch (err) {
+    console.error("Error fetching religion counts:", err);
+    return res.status(500).json({ message: "Error fetching religion counts", error: err });
+  }
+}
+
+
+
 
 }
 export default AllUsersController;

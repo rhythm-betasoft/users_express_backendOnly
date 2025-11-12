@@ -1,5 +1,6 @@
-import { Entity, PrimaryGeneratedColumn, Column, OneToMany } from "typeorm";
-import {Spend} from './Spend'
+import { Entity, PrimaryGeneratedColumn, Column, OneToMany,ManyToMany, JoinTable } from "typeorm";
+import { Spend } from './Spend'
+// import {Group} from './groups'
 @Entity("users")
 export class User {
   @PrimaryGeneratedColumn()
@@ -28,6 +29,21 @@ export class User {
 
   @Column({ name: "role" })
   role!: string;
+
+  @Column({ default: false })
+  pinned!: boolean;
+
+  @Column({ nullable: true })
+twoFactorSecret?: string;
+
+@Column({ default: false })
+flag!: boolean;
+
   @OneToMany(() => Spend, (spend) => spend.user)
-spends!: Spend[];
+  spends!: Spend[];
+
+  // @ManyToMany(()=>Group,(group)=>group.users)
+  // @JoinTable()
+  // groups!:Group[]
+  
 }

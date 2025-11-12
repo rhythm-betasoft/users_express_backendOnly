@@ -3,7 +3,10 @@ import { AppDataSource } from "../dataSource";
 import { User } from "../entity/User";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
+import * as QRCode from 'qrcode';
+
 import { transporter } from "../utils/mail";
+import TwoFA from "2fa-node";
 const ACCESS_SECRET = process.env.ACCESS_SECRET || "abcde";
 const REFRESH_SECRET = process.env.REFRESH_SECRET || "abcde";
 
@@ -18,48 +21,116 @@ class UserController {
       return res.status(200).json({ users });
     } catch (err) {
       return res.status(500).json({ message: "Server error" });
-    }
+    } 
   }
 
-  async register(req: Request, res: Response) {
-    const { name, email, password, confirm } = req.body;
-    if (!name || !email || !password) return res.status(400).json({ message: "All fields are required" });
-    if (confirm && password !== confirm) return res.status(400).json({ message: "Passwords do not match" });
-    try {
-      const existingUser = await userRepository.findOneBy({ email });
-      if (existingUser) return res.status(400).json({ message: "Email already registered" });
-      const hashedPassword = await bcrypt.hash(password, 10);
-      const newUser = userRepository.create({ name, email, password: hashedPassword, role: "user" });
-      const savedUser = await userRepository.save(newUser);
-      const accesstoken = jwt.sign({ id: savedUser.id, email: savedUser.email, role: savedUser.role }, ACCESS_SECRET, { expiresIn: "2m" });
-      const refreshtoken = jwt.sign({ id: savedUser.id, email: savedUser.email, role: savedUser.role }, REFRESH_SECRET, { expiresIn: "1d" });
-       await transporter.sendMail({
-      from: `"Betasoft Solutions" <${process.env.EMAIL_USER}>`,
-      to: savedUser.email,
-      subject: "Welcome to Betasoft Solutions!",
-      html: `<h3>Hello ${savedUser.name},</h3><p>Thanks for registering! Welcome to th family!!!!.</p>`,
-    });
-      return res.status(201).json({ message: "User registered successfully", accesstoken, refreshtoken, user: savedUser });
-    } catch (err) {
-      return res.status(500).json({ message: "Server error" });
-    }
-  }
+      async register(req: Request, res: Response) {
+        const { name, email, password, confirm } = req.body;
+        if (!name || !email || !password) return res.status(400).json({ message: "All fields are required" });
+        if (confirm && password !== confirm) return res.status(400).json({ message: "Passwords do not match" });
+        try {
+          const existingUser = await userRepository.findOneBy({ email });
+          if (existingUser) return res.status(400).json({ message: "Email already registered" });
+          const hashedPassword = await bcrypt.hash(password, 10);
+          const newUser = userRepository.create({ name, email, password: hashedPassword, role: "user" });                                                                                                                                                                                                                                                                                               
+          const savedUser = await userRepository.save(newUser); 
+          const accesstoken = jwt.sign({ id: savedUser.id, email: savedUser.email, role: savedUser.role }, ACCESS_SECRET, { expiresIn: "2m" });
+          const refreshtoken = jwt.sign({ id: savedUser.id, email: savedUser.email, role: savedUser.role }, REFRESH_SECRET, { expiresIn: "1d" });
+          await transporter.sendMail({
+          from: `"Betasoft Solutions" <${process.env.EMAIL_USER}>`,
+          to: savedUser.email,
+          subject: "Welcome to Betasoft Solutions!",
+          html: `<h3>Hello ${savedUser.name},</h3><p>Thanks for registering! Welcome to th family!!!!.</p>`,
+        });
+          return res.status(201).json({ message: "User registered successfully", accesstoken, refreshtoken, user: savedUser });
+        } catch (err) {
+          return res.status(500).json({ message: "Server error" });
+        }
+      }
+                                                                                                                                                                                                                                
+      async login(req: Request, res: Response) {
+      const { email, password } = req.body;
+      if (!email || !password)
+        return res.status(400).json({ message: "Email and password are required" });
 
-  async login(req: Request, res: Response) {
-    const { email, password } = req.body;
-    if (!email || !password) return res.status(400).json({ message: "Email and password are required" });
-    try {
-      const user = await userRepository.findOneBy({ email });
-      if (!user) return res.status(404).json({ message: "User not found" });
-      const isPasswordValid = await bcrypt.compare(password, user.password);
-      if (!isPasswordValid) return res.status(401).json({ message: "Invalid password" });
-      const accesstoken = jwt.sign({ id: user.id, email: user.email, role: user.role }, ACCESS_SECRET, { expiresIn: "2m" });
-      const refreshtoken = jwt.sign({ id: user.id, email: user.email, role: user.role }, REFRESH_SECRET, { expiresIn: "1d" });
-      return res.status(200).json({ message: "Login successful", accesstoken, refreshtoken, user });
-    } catch (err) {
-      return res.status(500).json({ message: "Server error" });
+      try {
+        const user = await userRepository.findOneBy({ email });
+        if (!user) return res.status(404).json({ message: "User not found" });
+
+        const valid = await bcrypt.compare(password, user.password);
+        if (!valid) return res.status(401).json({ message: "Invalid password" });
+
+
+      if (user.flag ){
+          const payload = { name: user.name, email: user.email };
+
+      
+          const { secret, uri } = await TwoFA.generateSecret(payload as any);
+
+          user.twoFactorSecret = secret;
+          await userRepository.save(user);
+
+          const qr = await QRCode.toDataURL(uri);
+          return res.status(200).json({
+            message: "2FA setup required (regenerated due to flag=1)",
+            qr,
+            otpauthUrl: uri
+          });
+        }
+
+        const accesstoken = jwt.sign(
+          { id: user.id, email: user.email, role: user.role },
+          ACCESS_SECRET,
+          { expiresIn: "2m" }
+        );
+
+        const refreshtoken = jwt.sign(
+          { id: user.id, email: user.email, role: user.role },
+          REFRESH_SECRET,
+          { expiresIn: "1d" }
+        );
+
+        return res.status(200).json({
+          message: "Login successful",
+          accesstoken,
+          refreshtoken,
+          user
+        });
+      } catch (err) {
+        console.error("Login error:", err);
+        return res.status(500).json({ message: "Server error" });
+      }
     }
-  }
+
+
+
+    async verifyTwoFA(req: Request, res: Response) {
+      const { userId, code } = req.body;
+
+      if (!userId || !code) 
+        return res.status(400).json({ message: "userId and code are required" });
+
+      try {
+        const user = await userRepository.findOneBy({ id: userId });
+        if (!user) return res.status(404).json({ message: "User not found" });
+        if (!user.twoFactorSecret) 
+          return res.status(400).json({ message: "2FA is not enabled for this user" });
+
+        const isValid = TwoFA.verifyToken(user.twoFactorSecret, code);
+
+        if (!isValid) 
+          return res.status(400).json({ success: false, message: "Invalid OTP code" });
+
+        return res.status(200).json({ success: true, message: "2FA verified successfully" });
+      } catch (err) {
+        console.error("2FA verification error:", err);
+        return res.status(500).json({ message: "Server error" });
+      }
+    }
+
+
+
+
 
   refresh(req: Request, res: Response) {
     const { refreshtoken } = req.body;
