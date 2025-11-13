@@ -39,6 +39,13 @@ twoFactorSecret?: string;
 @Column({ default: false })
 flag!: boolean;
 
+  @Column('json', { nullable: true })
+  trustedDevices?: {
+    deviceId: string;
+    createdAt: Date;
+    expiresAt: Date;
+  }[];
+
   @OneToMany(() => Spend, (spend) => spend.user)
   spends!: Spend[];
 

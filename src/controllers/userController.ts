@@ -5,7 +5,7 @@ import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import * as QRCode from 'qrcode';
 
-import { transporter } from "../utils/mail";
+import { sendEmail } from '../utils/mail';
 import TwoFA from "2fa-node";
 const ACCESS_SECRET = process.env.ACCESS_SECRET || "abcde";
 const REFRESH_SECRET = process.env.REFRESH_SECRET || "abcde";
@@ -21,112 +21,221 @@ class UserController {
       return res.status(200).json({ users });
     } catch (err) {
       return res.status(500).json({ message: "Server error" });
-    } 
+    }
   }
 
-      async register(req: Request, res: Response) {
-        const { name, email, password, confirm } = req.body;
-        if (!name || !email || !password) return res.status(400).json({ message: "All fields are required" });
-        if (confirm && password !== confirm) return res.status(400).json({ message: "Passwords do not match" });
-        try {
-          const existingUser = await userRepository.findOneBy({ email });
-          if (existingUser) return res.status(400).json({ message: "Email already registered" });
-          const hashedPassword = await bcrypt.hash(password, 10);
-          const newUser = userRepository.create({ name, email, password: hashedPassword, role: "user" });                                                                                                                                                                                                                                                                                               
-          const savedUser = await userRepository.save(newUser); 
-          const accesstoken = jwt.sign({ id: savedUser.id, email: savedUser.email, role: savedUser.role }, ACCESS_SECRET, { expiresIn: "2m" });
-          const refreshtoken = jwt.sign({ id: savedUser.id, email: savedUser.email, role: savedUser.role }, REFRESH_SECRET, { expiresIn: "1d" });
-          await transporter.sendMail({
-          from: `"Betasoft Solutions" <${process.env.EMAIL_USER}>`,
-          to: savedUser.email,
-          subject: "Welcome to Betasoft Solutions!",
-          html: `<h3>Hello ${savedUser.name},</h3><p>Thanks for registering! Welcome to th family!!!!.</p>`,
-        });
-          return res.status(201).json({ message: "User registered successfully", accesstoken, refreshtoken, user: savedUser });
-        } catch (err) {
-          return res.status(500).json({ message: "Server error" });
-        }
-      }
-                                                                                                                                                                                                                                
-      async login(req: Request, res: Response) {
-      const { email, password } = req.body;
-      if (!email || !password)
-        return res.status(400).json({ message: "Email and password are required" });
+  async register(req: Request, res: Response) {
+    const { name, email, password, confirm } = req.body;
+    if (!name || !email || !password) return res.status(400).json({ message: "All fields are required" });
+    if (confirm && password !== confirm) return res.status(400).json({ message: "Passwords do not match" });
+    try {
+      const existingUser = await userRepository.findOneBy({ email });
+      if (existingUser) return res.status(400).json({ message: "Email already registered" });
+      const hashedPassword = await bcrypt.hash(password, 10);
+      const newUser = userRepository.create({ name, email, password: hashedPassword, role: "user" });
+      const savedUser = await userRepository.save(newUser);
+      const accesstoken = jwt.sign({ id: savedUser.id, email: savedUser.email, role: savedUser.role }, ACCESS_SECRET, { expiresIn: "2m" });
+      const refreshtoken = jwt.sign({ id: savedUser.id, email: savedUser.email, role: savedUser.role }, REFRESH_SECRET, { expiresIn: "1d" });
+      await sendEmail(
+        savedUser.email,
+        "Welcome to Betasoft Solutions!",
+        `<h3>Hello ${savedUser.name},</h3><p>Thanks for registering! Welcome to the family!!!!.</p>`
+      );
+      return res.status(201).json({ message: "User registered successfully", accesstoken, refreshtoken, user: savedUser });
+    }
+    catch (err) {
+      return res.status(500).json({ message: "Server error" });
+    }
+  }
 
-      try {
-        const user = await userRepository.findOneBy({ email });
-        if (!user) return res.status(404).json({ message: "User not found" });
+  async login(req: Request, res: Response) {
+    console.log(req.headers);
+    console.log("user-agent", req.headers['user-agent'])
+    const { email, password } = req.body;
+    const userAgent = req.headers['user-agent'];
+    if (!email || !password) {
+      return res.status(400).json({ message: "Email and password are required" });
+    }
+    try {
+      const user = await userRepository.findOneBy({ email });
+      if (!user) return res.status(404).json({ message: "User not found" });
+      const valid = await bcrypt.compare(password, user.password);
+      if (!valid) return res.status(401).json({ message: "Invalid password" });
+      if (user.flag) {
+        const isTrusted = user.trustedDevices?.some(
+          (d: any) => d.deviceId === userAgent && new Date() < new Date(d.expiresAt)
+        );
+        if (isTrusted) {
+          const accesstoken = jwt.sign(
+            { id: user.id, email: user.email, role: user.role },
+            ACCESS_SECRET,
+            { expiresIn: "2m" }
+          );
 
-        const valid = await bcrypt.compare(password, user.password);
-        if (!valid) return res.status(401).json({ message: "Invalid password" });
+          const refreshtoken = jwt.sign(
+            { id: user.id, email: user.email, role: user.role },
+            REFRESH_SECRET,
+            { expiresIn: "1d" }
+          );
 
-
-      if (user.flag ){
-          const payload = { name: user.name, email: user.email };
-
-      
-          const { secret, uri } = await TwoFA.generateSecret(payload as any);
-
-          user.twoFactorSecret = secret;
-          await userRepository.save(user);
-
-          const qr = await QRCode.toDataURL(uri);
           return res.status(200).json({
-            message: "2FA setup required (regenerated due to flag=1)",
-            qr,
-            otpauthUrl: uri
+            message: "Login successful (trusted device)",
+            accesstoken,
+            refreshtoken,
+            user
           });
         }
-
-        const accesstoken = jwt.sign(
-          { id: user.id, email: user.email, role: user.role },
-          ACCESS_SECRET,
-          { expiresIn: "2m" }
-        );
-
-        const refreshtoken = jwt.sign(
-          { id: user.id, email: user.email, role: user.role },
-          REFRESH_SECRET,
-          { expiresIn: "1d" }
-        );
-
+        if (!user.twoFactorSecret) {
+          return res.status(400).json({
+            message: "2FA is not enabled "
+          })
+        }
         return res.status(200).json({
-          message: "Login successful",
-          accesstoken,
-          refreshtoken,
-          user
+          message: "2FA verification required",
+          user: { id: user.id, email: user.email }
         });
-      } catch (err) {
-        console.error("Login error:", err);
-        return res.status(500).json({ message: "Server error" });
       }
+      const accesstoken = jwt.sign(
+        { id: user.id, email: user.email, role: user.role },
+        ACCESS_SECRET,
+        { expiresIn: "2m" }
+      );
+
+      const refreshtoken = jwt.sign(
+        { id: user.id, email: user.email, role: user.role },
+        REFRESH_SECRET,
+        { expiresIn: "1d" }
+      );
+
+      return res.status(200).json({
+        message: "Login successful",
+        accesstoken,
+        refreshtoken,
+        user
+      });
+    } catch (err) {
+      console.error("Login error:", err);
+      return res.status(500).json({ message: "Server error" });
     }
+  }
+
+
+  async verifyTwoFA(req: Request, res: Response) {
+    const { userId, code, rememberDevice } = req.body;
+
+    const userAgent = req.headers['user-agent'];
+    if (!userId || !code) {
+      return res.status(400).json({ message: "userId and code are required" });
+    }
+    try {
+      const user = await userRepository.findOneBy({ id: userId });
+      if (!user || !user.twoFactorSecret) {
+        return res.status(404).json({ message: "User not found or 2FA not enabled" });
+      }
+      const isValid = TwoFA.verifyToken(user.twoFactorSecret, code);
+      if (!isValid) {
+        return res.status(400).json({ message: "Invalid OTP code" });
+      }
+      if (rememberDevice && userAgent) {
+        const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
+        user.trustedDevices = user.trustedDevices || [];
+        const exists = user.trustedDevices.find((d: any) => d.deviceId === userAgent);
+        if (!exists) {
+          user.trustedDevices.push({ deviceId: userAgent, createdAt: new Date(), expiresAt });
+          await userRepository.save(user);
+        }
+      }
+      const accesstoken = jwt.sign({ id: user.id }, ACCESS_SECRET, { expiresIn: "2m" });
+      const refreshtoken = jwt.sign({ id: user.id }, REFRESH_SECRET, { expiresIn: "1d" });
+      return res.status(200).json({
+        success: true,
+        message: "2FA verified",
+        accesstoken,
+        refreshtoken,
+        user
+      });
+    } catch (err) {
+      console.error("2FA error:", err);
+      return res.status(500).json({ message: "Server error" });
+    }
+  }
 
 
 
-    async verifyTwoFA(req: Request, res: Response) {
-      const { userId, code } = req.body;
-
-      if (!userId || !code) 
-        return res.status(400).json({ message: "userId and code are required" });
-
-      try {
-        const user = await userRepository.findOneBy({ id: userId });
-        if (!user) return res.status(404).json({ message: "User not found" });
-        if (!user.twoFactorSecret) 
-          return res.status(400).json({ message: "2FA is not enabled for this user" });
-
+  async toggleTwoFA(req: Request, res: Response) {
+    const userId = Number(req.params.userId);
+    const { flag, code } = req.body;
+    if (flag !== 0 && flag !== 1) {
+      return res.status(400).json({ message: "Flag must be 0 or 1" });
+    }
+    try {
+      const user = await userRepository.findOneBy({ id: userId });
+      if (!user) {
+        return res.status(404).json({ message: "User not found" });
+      }
+      if (flag === 0) {
+        if (!code) return res.status(400).json({ message: "OTP code is required to disable 2FA" });
+        if (!user.twoFactorSecret) return res.status(400).json({ message: "2FA not set up" });
         const isValid = TwoFA.verifyToken(user.twoFactorSecret, code);
-
-        if (!isValid) 
-          return res.status(400).json({ success: false, message: "Invalid OTP code" });
-
-        return res.status(200).json({ success: true, message: "2FA verified successfully" });
-      } catch (err) {
-        console.error("2FA verification error:", err);
-        return res.status(500).json({ message: "Server error" });
+        if (!isValid) return res.status(400).json({ message: "Invalid OTP code" });
+        user.trustedDevices = [];
+        user.twoFactorSecret = undefined;
       }
+      user.flag = Boolean(flag);
+      await userRepository.save(user);
+      return res.status(200).json({
+        message: "Toggle Successful",
+        flag: flag,
+      });
     }
+    catch (err: any) {
+      console.error("Error updating 2FA:", err);
+      return res.status(500).json({ message: "Server error", error: err.message });
+    }
+  }
+  async switchOnTwoFA(req: Request, res: Response) {
+    const { userId } = req.body;
+    try {
+      const user = await userRepository.findOneBy({ id: userId });
+      if (!user) return res.status(404).json({ message: "User not found" });
+
+      const payload = { name: user.name, email: user.email };
+      const { secret, uri } = await TwoFA.generateSecret(payload as any);
+      user.twoFactorSecret = secret;
+      await userRepository.save(user);
+
+      const qr = await QRCode.toDataURL(uri);
+      return res.status(200).json({ qr, otpauthUrl: uri, userId: user.id });
+    } catch (err) {
+      console.error("Error initiating 2FA:", err);
+      return res.status(500).json({ message: "Server error" });
+    }
+  }
+  async otpOnMail(req: Request, res: Response) {
+    const userId = Number(req.params.userId);
+    try {
+      const user = await userRepository.findOneBy({ id: userId });
+      if (!user || !user.twoFactorSecret) {
+        return res.status(404).json({ message: "User not found or 2FA not enabled" });
+      }
+      const result = TwoFA.generateToken(user.twoFactorSecret);
+      if (!result) {
+        return res.status(500).json({ message: "Failed to generate OTP" });
+      }
+      const { token } = result;
+      const htmlContent = `
+      <h3>Your One-Time Password (OTP)</h3>
+      <p>Use this code to complete your login: <strong>${token}</strong></p>
+      <p>This code will expire in 30 seconds.</p>
+    `;
+      await sendEmail(user.email, "Your OTP Code", htmlContent);
+      return res.status(200).json({ message: "OTP sent to email" });
+    } catch (err) {
+      console.error("Error sending OTP email:", err);
+      return res.status(500).json({ message: "Server error" });
+    }
+  }
+
 
 
 
@@ -141,7 +250,7 @@ class UserController {
       console.log(newAccessToken)
       return res.status(200).json({ accesstoken: newAccessToken });
     }
-     catch {
+    catch {
       return res.status(403).json({ message: "Invalid or expired refresh token" });
     }
   }
@@ -162,7 +271,7 @@ class UserController {
       user.blood_group = blood_group;
       await userRepository.save(user);
       return res.status(200).json({ message: "User profile updated successfully", user });
-    } 
+    }
     catch (err: any) {
       return res.status(500).json({ message: "Server error", error: err.message });
     }
@@ -311,7 +420,7 @@ export default UserController;
 //     return res.status(200).json({ message: "Hello" });
 //   }
 //  async updateProfile(req: Request, res: Response) {
-//   const userId = req.params.userId; 
+//   const userId = req.params.userId;
 //   const { age, gender, religion, blood_group } = req.body;
 //   if (!age || !gender || !religion || !blood_group) {
 //     return res.status(400).json({ message: "All fields are required" });
@@ -326,7 +435,7 @@ export default UserController;
 //       return res.status(400).json({ message: "No user found with the provided ID" });
 //     }
 //     return res.status(200).json({ message: "User edited successfully!" });
-//   } 
+//   }
 //   catch (error: any) {
 //     console.error('Error during database update:', error);
 //     return res.status(500).json({ message: "Server error", error: error.message });
