@@ -1,5 +1,6 @@
 import { Entity, PrimaryGeneratedColumn, Column, OneToMany,ManyToMany, JoinTable } from "typeorm";
 import { Spend } from './Spend'
+import {Announcement} from './Announcement'
 // import {Group} from './groups'
 @Entity("users")
 export class User {
@@ -49,6 +50,8 @@ flag!: boolean;
   @OneToMany(() => Spend, (spend) => spend.user)
   spends!: Spend[];
 
+  @OneToMany(() => Announcement, (announcement) => announcement.author)
+announcements!: Announcement[];
   // @ManyToMany(()=>Group,(group)=>group.users)
   // @JoinTable()
   // groups!:Group[]
