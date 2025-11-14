@@ -3,7 +3,7 @@ import { DataSource } from "typeorm";
 import {User} from './entity/User';
 import { Spend } from "./entity/Spend";
 import {Announcement} from './entity/Announcement'
-
+import {Comment} from './entity/Comment'
 import * as dotenv from "dotenv"
 dotenv.config();  
 export const AppDataSource = new DataSource({
@@ -13,7 +13,7 @@ export const AppDataSource = new DataSource({
   username: process.env.USER,
   password: process.env.PASS,
   database: process.env.DATABASE,
-  entities: [User,Spend,Announcement],
+  entities: [User,Spend,Announcement,Comment],
   synchronize: false,
   migrations:["src/migrations/*.ts"], 
   logging: true,

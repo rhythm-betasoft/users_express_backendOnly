@@ -1,7 +1,8 @@
-import { Entity, PrimaryGeneratedColumn, Column, OneToMany,ManyToMany, JoinTable } from "typeorm";
-import { Spend } from './Spend'
-import {Announcement} from './Announcement'
-// import {Group} from './groups'
+import { Entity, PrimaryGeneratedColumn, Column, OneToMany } from "typeorm";
+import { Spend } from './Spend';
+import { Announcement } from './Announcement';
+import { Comment } from './Comment';   
+
 @Entity("users")
 export class User {
   @PrimaryGeneratedColumn()
@@ -35,10 +36,10 @@ export class User {
   pinned!: boolean;
 
   @Column({ nullable: true })
-twoFactorSecret?: string;
+  twoFactorSecret?: string;
 
-@Column({ default: false })
-flag!: boolean;
+  @Column({ default: false })
+  flag!: boolean;
 
   @Column('json', { nullable: true })
   trustedDevices?: {
@@ -51,9 +52,8 @@ flag!: boolean;
   spends!: Spend[];
 
   @OneToMany(() => Announcement, (announcement) => announcement.author)
-announcements!: Announcement[];
-  // @ManyToMany(()=>Group,(group)=>group.users)
-  // @JoinTable()
-  // groups!:Group[]
-  
+  announcements!: Announcement[];
+
+  @OneToMany(() => Comment, (comment) => comment.author)
+  comments!: Comment[];
 }

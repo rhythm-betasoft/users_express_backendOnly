@@ -21,7 +21,7 @@ export class AnnouncementController{
 
     async getAllAnnouncements(req:Request,res:Response){
         try{
-            const announcements=await announcementRepository.find({relations:["author"]})
+            const announcements=await announcementRepository.find({relations:["author", "comments", "comments.author"]})
             return res.status(200).json(announcements)
         }
         catch(error){
